@@ -1,14 +1,19 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
+local currentCamera = workspace.CurrentCamera
 
 local CharacterConfig = require(ReplicatedStorage.Shared.CharacterConfig)
 
 local SelectCharacter = ReplicatedStorage
 	:WaitForChild("CharacterRemotes")
 	:WaitForChild("SelectCharacter")
+
+local Characters3D = ReplicatedStorage:WaitForChild("Characters3D")
 
 local characters = {
 	"Leon",
@@ -27,6 +32,15 @@ local characterDescriptions = {
 	Snapper = "Resistente e sorrateiro. Ótimo perto da água.",
 	Grumblet = "Barulhento e reclamão. Especialista em causar confusão.",
 }
+
+local selectedCharacterName = nil
+local previewModel = nil
+local previewRotation = 0
+local previewConnection = nil
+local originalCameraType = currentCamera.CameraType
+local originalCameraSubject = currentCamera.CameraSubject
+local blurEffect = nil
+local colorEffect = nil
 
 local function createCorner(parent, radius)
 	local corner = Instance.new("UICorner")
@@ -56,28 +70,80 @@ local function createLabel(parent, text, size, color, font)
 	return label
 end
 
+local function createButton(parent, text, backgroundColor, textColor)
+	local button = Instance.new("TextButton")
+	button.Text = text
+	button.TextColor3 = textColor or Color3.fromRGB(255, 255, 255)
+	button.TextSize = 18
+	button.Font = Enum.Font.GothamBold
+	button.AutoButtonColor = true
+	button.BackgroundColor3 = backgroundColor
+	button.Parent = parent
+	createCorner(button, 14)
+	createStroke(button, Color3.fromRGB(255, 255, 255), 1, 0.82)
+	return button
+end
+
+local function enableCinematicCamera()
+	originalCameraType = currentCamera.CameraType
+	originalCameraSubject = currentCamera.CameraSubject
+
+	currentCamera.CameraType = Enum.CameraType.Scriptable
+	currentCamera.CFrame = CFrame.new(Vector3.new(0, 14, 26), Vector3.new(0, 7, 0))
+
+	blurEffect = Instance.new("BlurEffect")
+	blurEffect.Name = "CharacterSelectionBlur"
+	blurEffect.Size = 10
+	blurEffect.Parent = Lighting
+
+	colorEffect = Instance.new("ColorCorrectionEffect")
+	colorEffect.Name = "CharacterSelectionColor"
+	colorEffect.Contrast = 0.12
+	colorEffect.Saturation = -0.08
+	colorEffect.TintColor = Color3.fromRGB(218, 238, 225)
+	colorEffect.Parent = Lighting
+end
+
+local function disableCinematicCamera()
+	currentCamera.CameraType = originalCameraType
+	currentCamera.CameraSubject = originalCameraSubject
+
+	if blurEffect then
+		blurEffect:Destroy()
+		blurEffect = nil
+	end
+
+	if colorEffect then
+		colorEffect:Destroy()
+		colorEffect = nil
+	end
+end
+
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "CharacterSelectionGui"
 screenGui.ResetOnSpawn = false
 screenGui.IgnoreGuiInset = true
 screenGui.Parent = playerGui
 
+enableCinematicCamera()
+
 local overlay = Instance.new("Frame")
 overlay.Name = "Overlay"
 overlay.Size = UDim2.fromScale(1, 1)
-overlay.BackgroundColor3 = Color3.fromRGB(8, 13, 18)
-overlay.BackgroundTransparency = 0.08
+overlay.BackgroundColor3 = Color3.fromRGB(5, 9, 12)
+overlay.BackgroundTransparency = 0.04
 overlay.Parent = screenGui
 
 local container = Instance.new("Frame")
 container.Name = "Container"
 container.AnchorPoint = Vector2.new(0.5, 0.5)
 container.Position = UDim2.fromScale(0.5, 0.5)
-container.Size = UDim2.fromScale(0.82, 0.78)
-container.BackgroundColor3 = Color3.fromRGB(18, 27, 34)
+container.Size = UDim2.fromScale(0.9, 0.82)
+container.BackgroundColor3 = Color3.fromRGB(16, 25, 31)
+container.BackgroundTransparency = 0.04
 container.Parent = overlay
-createCorner(container, 24)
-createStroke(container, Color3.fromRGB(87, 125, 106), 2, 0.15)
+createCorner(container, 28)
+createStroke(container, Color3.fromRGB(87, 125, 106), 2, 0.12)
 
 local padding = Instance.new("UIPadding")
 padding.PaddingTop = UDim.new(0, 28)
@@ -91,26 +157,154 @@ title.Name = "Title"
 title.Size = UDim2.new(1, 0, 0, 44)
 title.Position = UDim2.fromOffset(0, 0)
 
-local subtitle = createLabel(container, "Cada personagem tem habilidades próprias para escapar do zoológico.", 18, Color3.fromRGB(190, 205, 195), Enum.Font.Gotham)
+local subtitle = createLabel(container, "Veja o personagem em 3D, confira suas habilidades e confirme sua escolha.", 18, Color3.fromRGB(190, 205, 195), Enum.Font.Gotham)
 subtitle.Name = "Subtitle"
 subtitle.Size = UDim2.new(1, 0, 0, 34)
 subtitle.Position = UDim2.fromOffset(0, 48)
 
+local leftPanel = Instance.new("Frame")
+leftPanel.Name = "LeftPanel"
+leftPanel.BackgroundTransparency = 1
+leftPanel.Position = UDim2.fromOffset(0, 100)
+leftPanel.Size = UDim2.new(0.58, -18, 1, -100)
+leftPanel.Parent = container
+
+local rightPanel = Instance.new("Frame")
+rightPanel.Name = "PreviewPanel"
+rightPanel.BackgroundColor3 = Color3.fromRGB(10, 18, 23)
+rightPanel.Position = UDim2.new(0.58, 18, 0, 100)
+rightPanel.Size = UDim2.new(0.42, -18, 1, -100)
+rightPanel.Parent = container
+createCorner(rightPanel, 22)
+createStroke(rightPanel, Color3.fromRGB(116, 154, 128), 2, 0.25)
+
 local grid = Instance.new("Frame")
 grid.Name = "CharacterGrid"
 grid.BackgroundTransparency = 1
-grid.Position = UDim2.fromOffset(0, 100)
-grid.Size = UDim2.new(1, 0, 1, -100)
-grid.Parent = container
+grid.Size = UDim2.fromScale(1, 1)
+grid.Parent = leftPanel
 
 local layout = Instance.new("UIGridLayout")
-layout.CellPadding = UDim2.fromOffset(18, 18)
-layout.CellSize = UDim2.new(0.31, 0, 0.46, 0)
+layout.CellPadding = UDim2.fromOffset(16, 16)
+layout.CellSize = UDim2.new(0.48, 0, 0.31, 0)
 layout.SortOrder = Enum.SortOrder.LayoutOrder
 layout.Parent = grid
 
-local function selectCharacter(characterName)
-	SelectCharacter:FireServer(characterName)
+local previewPadding = Instance.new("UIPadding")
+previewPadding.PaddingTop = UDim.new(0, 22)
+previewPadding.PaddingBottom = UDim.new(0, 22)
+previewPadding.PaddingLeft = UDim.new(0, 22)
+previewPadding.PaddingRight = UDim.new(0, 22)
+previewPadding.Parent = rightPanel
+
+local previewTitle = createLabel(rightPanel, "Selecione um personagem", 28, Color3.fromRGB(255, 244, 203), Enum.Font.GothamBlack)
+previewTitle.Name = "PreviewTitle"
+previewTitle.Size = UDim2.new(1, 0, 0, 38)
+previewTitle.Position = UDim2.fromOffset(0, 0)
+
+local viewport = Instance.new("ViewportFrame")
+viewport.Name = "CharacterViewport"
+viewport.BackgroundColor3 = Color3.fromRGB(13, 23, 29)
+viewport.BackgroundTransparency = 0.12
+viewport.Position = UDim2.fromOffset(0, 52)
+viewport.Size = UDim2.new(1, 0, 0.58, 0)
+viewport.LightColor = Color3.fromRGB(255, 246, 220)
+viewport.Ambient = Color3.fromRGB(100, 130, 115)
+viewport.Parent = rightPanel
+createCorner(viewport, 20)
+createStroke(viewport, Color3.fromRGB(255, 244, 203), 1, 0.7)
+
+local viewportCamera = Instance.new("Camera")
+viewportCamera.Name = "PreviewCamera"
+viewportCamera.FieldOfView = 36
+viewportCamera.Parent = viewport
+viewport.CurrentCamera = viewportCamera
+
+local previewDescription = createLabel(rightPanel, "Escolha um card ao lado para visualizar o modelo 3D.", 15, Color3.fromRGB(220, 230, 224), Enum.Font.Gotham)
+previewDescription.Name = "PreviewDescription"
+previewDescription.Position = UDim2.new(0, 0, 0.68, 0)
+previewDescription.Size = UDim2.new(1, 0, 0, 62)
+
+local previewAbilities = createLabel(rightPanel, "", 15, Color3.fromRGB(151, 214, 173), Enum.Font.GothamBold)
+previewAbilities.Name = "PreviewAbilities"
+previewAbilities.Position = UDim2.new(0, 0, 0.79, 0)
+previewAbilities.Size = UDim2.new(1, 0, 0, 56)
+
+local playButton = createButton(rightPanel, "JOGAR", Color3.fromRGB(72, 132, 92), Color3.fromRGB(255, 255, 255))
+playButton.Name = "PlayButton"
+playButton.AnchorPoint = Vector2.new(0.5, 1)
+playButton.Position = UDim2.new(0.5, 0, 1, 0)
+playButton.Size = UDim2.new(1, 0, 0, 54)
+playButton.Visible = false
+
+local function clearPreview()
+	if previewModel then
+		previewModel:Destroy()
+		previewModel = nil
+	end
+end
+
+local function fitPreviewCamera(model)
+	local modelCFrame, modelSize = model:GetBoundingBox()
+	local maxSize = math.max(modelSize.X, modelSize.Y, modelSize.Z)
+	local focusPosition = modelCFrame.Position + Vector3.new(0, modelSize.Y * 0.08, 0)
+	local cameraDistance = math.clamp(maxSize * 1.85, 8, 22)
+	local cameraHeight = math.clamp(modelSize.Y * 0.28, 2, 8)
+
+	viewportCamera.CFrame = CFrame.new(
+		focusPosition + Vector3.new(0, cameraHeight, cameraDistance),
+		focusPosition
+	)
+end
+
+local function showCharacterPreview(characterName)
+	selectedCharacterName = characterName
+	clearPreview()
+
+	local modelTemplate = Characters3D:FindFirstChild(characterName)
+
+	previewTitle.Text = characterName
+	previewDescription.Text = characterDescriptions[characterName] or "Personagem jogável."
+
+	local config = CharacterConfig[characterName]
+	local abilities = config and config.Abilities or {}
+	previewAbilities.Text = "Habilidades: " .. table.concat(abilities, " / ")
+	playButton.Visible = true
+
+	if not modelTemplate then
+		previewDescription.Text = "Modelo 3D não encontrado em ReplicatedStorage/Characters3D."
+		return
+	end
+
+	previewModel = modelTemplate:Clone()
+	previewModel.Name = characterName .. "Preview"
+	previewModel.Parent = viewport
+
+	local root = previewModel:FindFirstChild("HumanoidRootPart")
+	if root then
+		previewModel.PrimaryPart = root
+		previewModel:SetPrimaryPartCFrame(CFrame.new(0, 0, 0))
+	end
+
+	for _, descendant in ipairs(previewModel:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			descendant.Anchored = true
+			descendant.CanCollide = false
+		end
+	end
+
+	previewRotation = 0
+	fitPreviewCamera(previewModel)
+end
+
+local function confirmCharacterSelection()
+	if not selectedCharacterName then
+		return
+	end
+
+	SelectCharacter:FireServer(selectedCharacterName)
+	disableCinematicCamera()
+	clearPreview()
 	screenGui.Enabled = false
 end
 
@@ -129,39 +323,64 @@ local function createCharacterCard(characterName, order)
 	createStroke(card, Color3.fromRGB(116, 154, 128), 1.5, 0.35)
 
 	local cardPadding = Instance.new("UIPadding")
-	cardPadding.PaddingTop = UDim.new(0, 16)
-	cardPadding.PaddingBottom = UDim.new(0, 16)
-	cardPadding.PaddingLeft = UDim.new(0, 16)
-	cardPadding.PaddingRight = UDim.new(0, 16)
+	cardPadding.PaddingTop = UDim.new(0, 14)
+	cardPadding.PaddingBottom = UDim.new(0, 14)
+	cardPadding.PaddingLeft = UDim.new(0, 14)
+	cardPadding.PaddingRight = UDim.new(0, 14)
 	cardPadding.Parent = card
 
-	local nameLabel = createLabel(card, characterName, 26, Color3.fromRGB(255, 244, 203), Enum.Font.GothamBlack)
+	local nameLabel = createLabel(card, characterName, 24, Color3.fromRGB(255, 244, 203), Enum.Font.GothamBlack)
 	nameLabel.Name = "CharacterName"
-	nameLabel.Size = UDim2.new(1, 0, 0, 34)
+	nameLabel.Size = UDim2.new(1, 0, 0, 32)
 	nameLabel.Position = UDim2.fromOffset(0, 0)
 
-	local description = createLabel(card, characterDescriptions[characterName] or "Personagem jogável.", 15, Color3.fromRGB(215, 225, 218), Enum.Font.Gotham)
+	local description = createLabel(card, characterDescriptions[characterName] or "Personagem jogável.", 14, Color3.fromRGB(215, 225, 218), Enum.Font.Gotham)
 	description.Name = "Description"
-	description.Size = UDim2.new(1, 0, 0, 58)
-	description.Position = UDim2.fromOffset(0, 44)
+	description.Size = UDim2.new(1, 0, 0, 50)
+	description.Position = UDim2.fromOffset(0, 38)
 
-	local abilityText = "Habilidades: " .. table.concat(abilities, " / ")
-	local abilitiesLabel = createLabel(card, abilityText, 14, Color3.fromRGB(151, 214, 173), Enum.Font.GothamBold)
+	local abilityText = "Q/E: " .. table.concat(abilities, " / ")
+	local abilitiesLabel = createLabel(card, abilityText, 13, Color3.fromRGB(151, 214, 173), Enum.Font.GothamBold)
 	abilitiesLabel.Name = "Abilities"
-	abilitiesLabel.Size = UDim2.new(1, 0, 0, 48)
-	abilitiesLabel.Position = UDim2.fromOffset(0, 112)
+	abilitiesLabel.Size = UDim2.new(1, 0, 0, 42)
+	abilitiesLabel.Position = UDim2.fromOffset(0, 92)
 
-	local buttonHint = createLabel(card, "Selecionar", 16, Color3.fromRGB(255, 255, 255), Enum.Font.GothamBold)
+	local buttonHint = createLabel(card, "Visualizar", 15, Color3.fromRGB(255, 255, 255), Enum.Font.GothamBold)
 	buttonHint.Name = "ButtonHint"
 	buttonHint.AnchorPoint = Vector2.new(0.5, 1)
 	buttonHint.Position = UDim2.new(0.5, 0, 1, 0)
-	buttonHint.Size = UDim2.new(1, 0, 0, 28)
+	buttonHint.Size = UDim2.new(1, 0, 0, 24)
 
 	card.MouseButton1Click:Connect(function()
-		selectCharacter(characterName)
+		showCharacterPreview(characterName)
 	end)
 end
+
+playButton.MouseButton1Click:Connect(confirmCharacterSelection)
 
 for index, characterName in ipairs(characters) do
 	createCharacterCard(characterName, index)
 end
+
+showCharacterPreview(characters[1])
+
+previewConnection = RunService.RenderStepped:Connect(function(deltaTime)
+	if not screenGui.Enabled then
+		return
+	end
+
+	if previewModel and previewModel.PrimaryPart then
+		previewRotation += deltaTime * 0.75
+		previewModel:SetPrimaryPartCFrame(CFrame.Angles(0, previewRotation, 0))
+	end
+end)
+
+screenGui.Destroying:Connect(function()
+	if previewConnection then
+		previewConnection:Disconnect()
+		previewConnection = nil
+	end
+
+	disableCinematicCamera()
+	clearPreview()
+end)
