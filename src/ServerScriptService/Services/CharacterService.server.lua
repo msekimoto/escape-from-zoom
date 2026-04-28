@@ -2,46 +2,27 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CharacterConfig = require(ReplicatedStorage.Shared.CharacterConfig)
+local CharacterBuilder = require(script.Parent:WaitForChild("CharacterBuilder"))
 
 local Remotes = ReplicatedStorage:WaitForChild("CharacterRemotes")
 local SelectCharacter = Remotes:WaitForChild("SelectCharacter")
 
-local Characters3D = ReplicatedStorage:WaitForChild("Characters3D")
-
 local CharacterService = {}
 
-local function getSpawnCFrame(player)
-	local character = player.Character
+local function applyCharacter(player)
+	local characterName = player:GetAttribute("SelectedCharacter") or player:GetAttribute("Character") or "Momo"
+	local skinName = player:GetAttribute("SelectedSkin") or player:GetAttribute("Skin") or "Default"
 
-	if character then
-		local root = character:FindFirstChild("HumanoidRootPart")
-
-		if root then
-			return root.CFrame
-		end
+	if not CharacterConfig[characterName] then
+		warn("Personagem não existe no CharacterConfig:", characterName)
+		return
 	end
 
-	return CFrame.new(0, 10, 0)
+	print("Aplicando personagem:", player.Name, characterName, skinName)
+	CharacterBuilder.Build(player, characterName, skinName)
 end
 
-local function validateCharacterModel(characterName, model)
-	if not model then
-		warn("Modelo 3D não encontrado:", characterName)
-		return false
-	end
-
-	local humanoid = model:FindFirstChildOfClass("Humanoid")
-	local root = model:FindFirstChild("HumanoidRootPart")
-
-	if not humanoid or not root then
-		warn("Modelo precisa ter Humanoid e HumanoidRootPart:", characterName)
-		return false
-	end
-
-	return true
-end
-
-function CharacterService.SpawnCharacter(player, characterName)
+SelectCharacter.OnServerEvent:Connect(function(player, characterName)
 	if typeof(characterName) ~= "string" then
 		warn("Nome de personagem inválido recebido de:", player.Name)
 		return
@@ -52,44 +33,24 @@ function CharacterService.SpawnCharacter(player, characterName)
 		return
 	end
 
-	local modelTemplate = Characters3D:FindFirstChild(characterName)
-
-	if not validateCharacterModel(characterName, modelTemplate) then
-		return
-	end
-
-	local oldCharacter = player.Character
-	local spawnCFrame = getSpawnCFrame(player)
-
-	local newCharacter = modelTemplate:Clone()
-	newCharacter.Name = player.Name
-
-	local root = newCharacter:FindFirstChild("HumanoidRootPart")
-	newCharacter.PrimaryPart = root
-	newCharacter:SetPrimaryPartCFrame(spawnCFrame)
-	newCharacter.Parent = workspace
-
-	player.Character = newCharacter
 	player:SetAttribute("SelectedCharacter", characterName)
+	player:SetAttribute("SelectedSkin", "Default")
+	player:SetAttribute("Character", characterName)
+	player:SetAttribute("Skin", "Default")
 
-	if oldCharacter and oldCharacter ~= newCharacter then
-		oldCharacter:Destroy()
-	end
-end
+	print(player.Name .. " escolheu " .. characterName)
 
-SelectCharacter.OnServerEvent:Connect(function(player, characterName)
-	CharacterService.SpawnCharacter(player, characterName)
+	-- Força respawn para aplicar o visual depois que o Roblox carregar o avatar padrão.
+	player:LoadCharacter()
 end)
 
 Players.PlayerAdded:Connect(function(player)
-	player.CharacterAdded:Connect(function()
-		local selectedCharacter = player:GetAttribute("SelectedCharacter")
+	player:SetAttribute("SelectedCharacter", player:GetAttribute("SelectedCharacter") or "Momo")
+	player:SetAttribute("SelectedSkin", player:GetAttribute("SelectedSkin") or "Default")
 
-		if selectedCharacter then
-			task.defer(function()
-				CharacterService.SpawnCharacter(player, selectedCharacter)
-			end)
-		end
+	player.CharacterAdded:Connect(function()
+		task.wait(1.5)
+		applyCharacter(player)
 	end)
 end)
 
