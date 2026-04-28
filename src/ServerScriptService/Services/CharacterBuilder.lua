@@ -131,7 +131,8 @@ local function tryAttachImportedModel(player, characterName)
 	scaleModelToHeight(clone, target)
 
 	clone.PrimaryPart = modelRoot
-	clone:PivotTo(root.CFrame)
+	local rotationFix = CFrame.Angles(math.rad(90), 0, 0)
+	clone:PivotTo(root.CFrame * rotationFix)
 
 	for _, item in ipairs(clone:GetDescendants()) do
 		if item:IsA("BasePart") then
