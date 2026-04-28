@@ -4,6 +4,20 @@ local SkinConfig = require(ReplicatedStorage.Shared.SkinConfig)
 
 local CharacterBuilder = {}
 
+local CHARACTER_SCALES = {
+	Porinha = 5.2,
+	Leon = 6,
+	Elly = 6.5,
+	Momo = 5,
+	Snapper = 5.3,
+	Grumblet = 4.8
+}
+
+local CHARACTER_ROTATION_FIXES = {
+	-- Ajuste aplicado porque o FBX da Porinha veio deitado.
+	Porinha = CFrame.Angles(math.rad(90), 0, 0),
+}
+
 local function clearOldParts(character)
 	for _, item in ipairs(character:GetChildren()) do
 		if item:GetAttribute("GeneratedCharacterPart") or item:GetAttribute("ImportedCharacterModel") then
@@ -76,27 +90,23 @@ local function buildFallback(character, characterName, skin)
 	createPart(characterName .. "Head", Enum.PartType.Ball, Vector3.new(1.55, 1.45, 1.45), skin.SecondaryColor, character, Vector3.new(0, 1.95, 0))
 end
 
--- 🔥 AUTO SCALE
 local function scaleModelToHeight(model, targetHeight)
 	local _, size = model:GetBoundingBox()
-	local currentHeight = size.Y
-
-	if currentHeight == 0 then return end
-
-	local scale = targetHeight / currentHeight
-
-	model:ScaleTo(scale)
+	if size.Y <= 0 then return end
+	model:ScaleTo(targetHeight / size.Y)
 end
 
-local CHARACTER_SCALES = {
-	Porinha = 5.2,
-	Leon = 6,
-	Elly = 6.5,
-	Momo = 5,
-	Snapper = 5.3,
-	Grumblet = 4.8
-}
-
+local function createAnimatedWeld(root, part)
+	local weld = Instance.new("Weld")
+	weld.Name = "CharacterVisualWeld"
+	weld.Part0 = root
+	weld.Part1 = part
+	weld.C0 = root.CFrame:ToObjectSpace(part.CFrame)
+	weld.C1 = CFrame.identity
+	weld:SetAttribute("AnimatedCharacterWeld", true)
+	weld.Parent = part
+	return weld
+end
 
 local function tryAttachImportedModel(player, characterName)
 	local character = player.Character
@@ -127,11 +137,13 @@ local function tryAttachImportedModel(player, characterName)
 		return false
 	end
 
+	clone.PrimaryPart = modelRoot
+
 	local target = CHARACTER_SCALES[characterName] or 5.5
 	scaleModelToHeight(clone, target)
 
 	clone.PrimaryPart = modelRoot
-	local rotationFix = CFrame.Angles(math.rad(90), 0, 0)
+	local rotationFix = CHARACTER_ROTATION_FIXES[characterName] or CFrame.identity
 	clone:PivotTo(root.CFrame * rotationFix)
 
 	for _, item in ipairs(clone:GetDescendants()) do
@@ -139,11 +151,7 @@ local function tryAttachImportedModel(player, characterName)
 			item.Anchored = false
 			item.CanCollide = false
 			item.Massless = true
-
-			local weld = Instance.new("WeldConstraint")
-			weld.Part0 = root
-			weld.Part1 = item
-			weld.Parent = item
+			createAnimatedWeld(root, item)
 		end
 	end
 
