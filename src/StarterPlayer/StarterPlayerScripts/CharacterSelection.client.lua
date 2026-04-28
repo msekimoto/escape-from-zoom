@@ -5,6 +5,7 @@ local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
 local camera = workspace.CurrentCamera
 
 local SelectCharacter = ReplicatedStorage:WaitForChild("CharacterRemotes"):WaitForChild("SelectCharacter")
@@ -12,12 +13,19 @@ local Characters3D = ReplicatedStorage:WaitForChild("Characters3D")
 
 local characters = { "Momo", "Porinha", "Leon", "Elly", "Snapper", "Grumblet" }
 
+-- Evita duplicar a tela quando o player respawna, quando o Rojo sincroniza,
+-- ou quando ainda existe uma versão antiga da UI no PlayerGui.
+local existingGui = playerGui:FindFirstChild("CharacterSelectionGui")
+if existingGui then
+	existingGui:Destroy()
+end
+
 -- UI
 local gui = Instance.new("ScreenGui")
 gui.Name = "CharacterSelectionGui"
 gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
-gui.Parent = player:WaitForChild("PlayerGui")
+gui.Parent = playerGui
 
 local frame = Instance.new("Frame")
 frame.Size = UDim2.fromScale(1, 1)
@@ -37,13 +45,26 @@ camera.CFrame = CFrame.new(0,8,20, 0,0,0)
 
 -- PREVIEW MODEL
 local preview
+local renderConnection
+
+local function destroyPreview()
+	if preview then
+		preview:Destroy()
+		preview = nil
+	end
+end
 
 local function showPreview(name)
-	if preview then preview:Destroy() end
+	destroyPreview()
+
 	local model = Characters3D:FindFirstChild(name)
-	if not model then return end
+	if not model then
+		warn("Modelo 3D não encontrado:", name)
+		return
+	end
 
 	preview = model:Clone()
+	preview.Name = name .. "Preview"
 	preview.Parent = workspace
 
 	local root = preview:FindFirstChild("HumanoidRootPart")
@@ -54,6 +75,7 @@ local function showPreview(name)
 
 	for _,p in ipairs(preview:GetDescendants()) do
 		if p:IsA("BasePart") then
+			p.CanCollide = false
 			p.Anchored = p.Name == "HumanoidRootPart"
 		end
 	end
@@ -75,8 +97,18 @@ local selected
 
 for _,name in ipairs(characters) do
 	local b = Instance.new("TextButton")
+	b.Name = name .. "Button"
 	b.Text = name
+	b.TextScaled = true
+	b.Font = Enum.Font.FredokaOne
+	b.TextColor3 = Color3.fromRGB(255, 255, 255)
+	b.BackgroundColor3 = name == "Porinha" and Color3.fromRGB(255, 120, 180) or Color3.fromRGB(38, 32, 58)
 	b.Parent = grid
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 18)
+	corner.Parent = b
+
 	b.MouseButton1Click:Connect(function()
 		selected = name
 		showPreview(name)
@@ -85,10 +117,19 @@ end
 
 -- PLAY BUTTON
 local play = Instance.new("TextButton")
+play.Name = "PlayButton"
 play.Text = "JOGAR"
+play.TextScaled = true
+play.Font = Enum.Font.FredokaOne
+play.TextColor3 = Color3.fromRGB(255, 255, 255)
+play.BackgroundColor3 = Color3.fromRGB(70, 130, 90)
 play.Size = UDim2.fromScale(0.2,0.08)
 play.Position = UDim2.fromScale(0.4,0.85)
 play.Parent = frame
+
+local playCorner = Instance.new("UICorner")
+playCorner.CornerRadius = UDim.new(0, 18)
+playCorner.Parent = play
 
 local function tween(obj,t,props)
 	local tw = TweenService:Create(obj,TweenInfo.new(t),props)
@@ -98,6 +139,9 @@ end
 
 play.MouseButton1Click:Connect(function()
 	if not selected then return end
+
+	play.Active = false
+	play.Text = "INICIANDO..."
 
 	-- ZOOM CAMERA
 	tween(camera,0.8,{CFrame = CFrame.new(0,3,8,0,0,0)})
@@ -111,6 +155,7 @@ play.MouseButton1Click:Connect(function()
 
 	-- SPAWN
 	SelectCharacter:FireServer(selected)
+	destroyPreview()
 
 	-- RESTORE CAMERA
 	camera.CameraType = Enum.CameraType.Custom
@@ -123,8 +168,17 @@ play.MouseButton1Click:Connect(function()
 end)
 
 -- ROTATION
-RunService.RenderStepped:Connect(function(dt)
+renderConnection = RunService.RenderStepped:Connect(function(dt)
 	if preview and preview.PrimaryPart then
 		preview:SetPrimaryPartCFrame(preview.PrimaryPart.CFrame * CFrame.Angles(0,dt,0))
 	end
+end)
+
+gui.Destroying:Connect(function()
+	if renderConnection then
+		renderConnection:Disconnect()
+		renderConnection = nil
+	end
+
+	destroyPreview()
 end)
