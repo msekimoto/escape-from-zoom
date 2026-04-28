@@ -19,6 +19,7 @@ local function applyCharacter(player)
 	local characterName = player:GetAttribute("Character") or "Momo"
 	local skinName = player:GetAttribute("Skin") or "Default"
 
+	print("Aplicando personagem:", player.Name, characterName, skinName)
 	CharacterBuilder.Build(player, characterName, skinName)
 end
 
@@ -33,18 +34,16 @@ selectRemote.OnServerEvent:Connect(function(player, characterName)
 
 	print(player.Name .. " escolheu " .. characterName)
 
-	-- Muito importante: reconstrói o visual imediatamente após a escolha.
-	if player.Character then
-		applyCharacter(player)
-	end
+	-- Caminho mais confiável: força respawn para aplicar o visual após o avatar Roblox terminar de carregar.
+	player:LoadCharacter()
 end)
 
 Players.PlayerAdded:Connect(function(player)
-	player:SetAttribute("Character", "Momo")
-	player:SetAttribute("Skin", "Default")
+	player:SetAttribute("Character", player:GetAttribute("Character") or "Momo")
+	player:SetAttribute("Skin", player:GetAttribute("Skin") or "Default")
 
 	player.CharacterAdded:Connect(function()
-		-- Espera o avatar padrão carregar completamente antes de esconder/substituir.
+		-- Espera o Roblox carregar o avatar padrão antes de esconder/substituir.
 		task.wait(1.5)
 		applyCharacter(player)
 	end)
