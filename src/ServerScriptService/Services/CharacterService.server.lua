@@ -18,3 +18,17 @@ selectRemote.OnServerEvent:Connect(function(player, characterName)
 		print(player.Name .. " escolheu " .. characterName)
 	end
 end)
+
+
+local CharacterBuilder = require(script.Parent.CharacterBuilder)
+
+game.Players.PlayerAdded:Connect(function(player)
+	player.CharacterAdded:Connect(function(char)
+		task.wait(1)
+
+		local characterName = player:GetAttribute("Character") or "Momo"
+		local skinName = "Default"
+
+		CharacterBuilder.Build(player, characterName, skinName)
+	end)
+end)
