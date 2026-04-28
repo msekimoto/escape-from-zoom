@@ -6,7 +6,7 @@ local CharacterBuilder = {}
 
 local function clearOldParts(character)
 	for _, item in ipairs(character:GetChildren()) do
-		if item:GetAttribute("GeneratedCharacterPart") then
+		if item:GetAttribute("GeneratedCharacterPart") or item:GetAttribute("ImportedCharacterModel") then
 			item:Destroy()
 		end
 	end
@@ -77,11 +77,16 @@ local function buildMomo(character, skin)
 end
 
 local function buildPorinha(character, skin)
-	buildBase(character, skin, 0.95)
-	createPart("PigSnout", Enum.PartType.Ball, Vector3.new(0.58, 0.34, 0.32), skin.AccentColor, character, Vector3.new(0, 1.9, -0.93))
-	createPart("LeftPigEar", Enum.PartType.Ball, Vector3.new(0.34, 0.52, 0.16), skin.PrimaryColor, character, Vector3.new(-0.56, 2.48, -0.05))
-	createPart("RightPigEar", Enum.PartType.Ball, Vector3.new(0.34, 0.52, 0.16), skin.PrimaryColor, character, Vector3.new(0.56, 2.48, -0.05))
-	createPart("HeartCheek", Enum.PartType.Ball, Vector3.new(0.16, 0.16, 0.08), skin.AccentColor, character, Vector3.new(0.48, 1.98, -0.86))
+	-- Fallback procedural caso ainda não exista ReplicatedStorage/CharacterModels/Porinha.
+	createPart("PorinhaBody", Enum.PartType.Ball, Vector3.new(2.2, 2.4, 1.6), skin.PrimaryColor, character, Vector3.new(0, 0.2, 0))
+	createPart("PorinhaHead", Enum.PartType.Ball, Vector3.new(1.8, 1.6, 1.6), skin.SecondaryColor, character, Vector3.new(0, 2, 0))
+	createPart("PorinhaSnout", Enum.PartType.Ball, Vector3.new(0.7, 0.5, 0.6), Color3.fromRGB(255, 170, 190), character, Vector3.new(0, 1.9, -0.9))
+	createPart("PorinhaEarL", Enum.PartType.Ball, Vector3.new(0.4, 0.7, 0.2), skin.PrimaryColor, character, Vector3.new(-0.6, 2.6, 0))
+	createPart("PorinhaEarR", Enum.PartType.Ball, Vector3.new(0.4, 0.7, 0.2), skin.PrimaryColor, character, Vector3.new(0.6, 2.6, 0))
+	createPart("PorinhaDress", Enum.PartType.Block, Vector3.new(2.4, 1.2, 1.8), Color3.fromRGB(255, 120, 180), character, Vector3.new(0, -0.6, 0))
+	createPart("PorinhaDressStripe", Enum.PartType.Block, Vector3.new(2.4, 0.2, 1.85), Color3.fromRGB(255, 200, 220), character, Vector3.new(0, -0.3, 0))
+	createPart("PorinhaEyeL", Enum.PartType.Ball, Vector3.new(0.2, 0.2, 0.2), Color3.fromRGB(0, 0, 0), character, Vector3.new(-0.3, 2.1, -0.7))
+	createPart("PorinhaEyeR", Enum.PartType.Ball, Vector3.new(0.2, 0.2, 0.2), Color3.fromRGB(0, 0, 0), character, Vector3.new(0.3, 2.1, -0.7))
 end
 
 local function buildLeon(character, skin)
@@ -125,6 +130,51 @@ local builders = {
 	Grumblet = buildGrumblet,
 }
 
+local function tryAttachImportedModel(player, characterName)
+	local character = player.Character
+	if not character then return false end
+
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if not root then return false end
+
+	local modelsFolder = ReplicatedStorage:FindFirstChild("CharacterModels")
+	if not modelsFolder then return false end
+
+	local sourceModel = modelsFolder:FindFirstChild(characterName)
+	if not sourceModel or not sourceModel:IsA("Model") then return false end
+
+	local clone = sourceModel:Clone()
+	clone.Name = characterName .. "Model"
+	clone:SetAttribute("ImportedCharacterModel", true)
+	clone.Parent = character
+
+	local modelRoot = clone.PrimaryPart or clone:FindFirstChild("HumanoidRootPart") or clone:FindFirstChildWhichIsA("BasePart", true)
+	if not modelRoot then
+		warn("Imported model has no BasePart:", characterName)
+		clone:Destroy()
+		return false
+	end
+
+	clone.PrimaryPart = modelRoot
+	clone:PivotTo(root.CFrame)
+
+	for _, item in ipairs(clone:GetDescendants()) do
+		if item:IsA("BasePart") then
+			item.Anchored = false
+			item.CanCollide = false
+			item.Massless = true
+
+			local weld = Instance.new("WeldConstraint")
+			weld.Part0 = root
+			weld.Part1 = item
+			weld.Parent = item
+		end
+	end
+
+	print("Modelo importado aplicado:", characterName)
+	return true
+end
+
 function CharacterBuilder.Build(player, characterName, skinName)
 	local character = player.Character
 	if not character then return end
@@ -135,6 +185,10 @@ function CharacterBuilder.Build(player, characterName, skinName)
 	character.PrimaryPart = root
 	clearOldParts(character)
 	hideDefaultAvatar(character)
+
+	if tryAttachImportedModel(player, characterName) then
+		return
+	end
 
 	local config = SkinConfig[characterName]
 	if not config then return end
