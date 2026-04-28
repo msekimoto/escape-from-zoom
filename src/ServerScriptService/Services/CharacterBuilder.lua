@@ -76,6 +76,28 @@ local function buildFallback(character, characterName, skin)
 	createPart(characterName .. "Head", Enum.PartType.Ball, Vector3.new(1.55, 1.45, 1.45), skin.SecondaryColor, character, Vector3.new(0, 1.95, 0))
 end
 
+-- 🔥 AUTO SCALE
+local function scaleModelToHeight(model, targetHeight)
+	local _, size = model:GetBoundingBox()
+	local currentHeight = size.Y
+
+	if currentHeight == 0 then return end
+
+	local scale = targetHeight / currentHeight
+
+	model:ScaleTo(scale)
+end
+
+local CHARACTER_SCALES = {
+	Porinha = 5.2,
+	Leon = 6,
+	Elly = 6.5,
+	Momo = 5,
+	Snapper = 5.3,
+	Grumblet = 4.8
+}
+
+
 local function tryAttachImportedModel(player, characterName)
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
@@ -104,6 +126,9 @@ local function tryAttachImportedModel(player, characterName)
 		clone:Destroy()
 		return false
 	end
+
+	local target = CHARACTER_SCALES[characterName] or 5.5
+	scaleModelToHeight(clone, target)
 
 	clone.PrimaryPart = modelRoot
 	clone:PivotTo(root.CFrame)
