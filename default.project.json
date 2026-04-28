@@ -1,0 +1,33 @@
+{
+  "name": "escape-from-zoom",
+  "tree": {
+    "$className": "DataModel",
+
+    "ReplicatedStorage": {
+      "Shared": {
+        "$path": "src/ReplicatedStorage/Shared"
+      },
+      "CharacterRemotes": {
+        "$className": "Folder",
+        "SelectCharacter": {
+          "$className": "RemoteEvent"
+        },
+        "UseAbility": {
+          "$className": "RemoteEvent"
+        }
+      }
+    },
+
+    "ServerScriptService": {
+      "Services": {
+        "$path": "src/ServerScriptService/Services"
+      }
+    },
+
+    "StarterPlayer": {
+      "StarterPlayerScripts": {
+        "$path": "src/StarterPlayer/StarterPlayerScripts"
+      }
+    }
+  }
+}
