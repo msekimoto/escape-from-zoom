@@ -7,6 +7,10 @@
       "Shared": {
         "$path": "src/ReplicatedStorage/Shared"
       },
+      "CharacterModels": {
+        "$className": "Folder",
+        "$ignoreUnknownInstances": true
+      },
       "CharacterRemotes": {
         "$className": "Folder",
         "SelectCharacter": {
@@ -15,13 +19,20 @@
         "UseAbility": {
           "$className": "RemoteEvent"
         }
+      },
+      "GameRemotes": {
+        "$className": "Folder",
+        "ObjectiveUpdated": {
+          "$className": "RemoteEvent"
+        },
+        "GameFinished": {
+          "$className": "RemoteEvent"
+        }
       }
     },
 
     "ServerScriptService": {
-      "Services": {
-        "$path": "src/ServerScriptService/Services"
-      }
+      "$path": "src/ServerScriptService"
     },
 
     "StarterPlayer": {
