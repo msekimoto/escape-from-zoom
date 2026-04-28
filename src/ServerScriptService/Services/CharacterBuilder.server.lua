@@ -12,6 +12,23 @@ local function clearOldParts(character)
 	end
 end
 
+local function hideDefaultAvatar(character)
+	for _, item in ipairs(character:GetDescendants()) do
+		if item:IsA("BasePart") and item.Name ~= "HumanoidRootPart" and not item:GetAttribute("GeneratedCharacterPart") then
+			item.Transparency = 1
+			item.CanCollide = false
+		elseif item:IsA("Decal") then
+			item.Transparency = 1
+		end
+	end
+
+	for _, accessory in ipairs(character:GetChildren()) do
+		if accessory:IsA("Accessory") then
+			accessory:Destroy()
+		end
+	end
+end
+
 local function createPart(name, shape, size, color, character, offset)
 	local part = Instance.new("Part")
 	part.Name = name
@@ -117,6 +134,7 @@ function CharacterBuilder.Build(player, characterName, skinName)
 
 	character.PrimaryPart = root
 	clearOldParts(character)
+	hideDefaultAvatar(character)
 
 	local config = SkinConfig[characterName]
 	if not config then return end
