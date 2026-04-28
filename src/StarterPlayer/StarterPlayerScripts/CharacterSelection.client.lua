@@ -1,62 +1,184 @@
+-- CINEMATIC CHARACTER SELECTION + TRANSITION
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+local camera = workspace.CurrentCamera
+
 local SelectCharacter = ReplicatedStorage:WaitForChild("CharacterRemotes"):WaitForChild("SelectCharacter")
+local Characters3D = ReplicatedStorage:WaitForChild("Characters3D")
 
 local characters = { "Momo", "Porinha", "Leon", "Elly", "Snapper", "Grumblet" }
 
+-- Evita duplicar a tela quando o player respawna, quando o Rojo sincroniza,
+-- ou quando ainda existe uma versão antiga da UI no PlayerGui.
+local existingGui = playerGui:FindFirstChild("CharacterSelectionGui")
+if existingGui then
+	existingGui:Destroy()
+end
+
+-- UI
 local gui = Instance.new("ScreenGui")
 gui.Name = "CharacterSelectionGui"
 gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
-gui.Parent = player:WaitForChild("PlayerGui")
+gui.Parent = playerGui
 
 local frame = Instance.new("Frame")
 frame.Size = UDim2.fromScale(1, 1)
-frame.BackgroundColor3 = Color3.fromRGB(12, 10, 20)
-frame.BackgroundTransparency = 0.08
+frame.BackgroundColor3 = Color3.fromRGB(8, 8, 12)
 frame.Parent = gui
 
-local title = Instance.new("TextLabel")
-title.Size = UDim2.fromScale(1, 0.12)
-title.Position = UDim2.fromScale(0, 0.06)
-title.BackgroundTransparency = 1
-title.Text = "ESCOLHA SEU ANIMAL"
-title.TextScaled = true
-title.Font = Enum.Font.FredokaOne
-title.TextColor3 = Color3.fromRGB(255, 238, 210)
-title.Parent = frame
+local fade = Instance.new("Frame")
+fade.Size = UDim2.fromScale(1,1)
+fade.BackgroundColor3 = Color3.new(0,0,0)
+fade.BackgroundTransparency = 1
+fade.ZIndex = 10
+fade.Parent = gui
 
+-- CAMERA SETUP
+camera.CameraType = Enum.CameraType.Scriptable
+camera.CFrame = CFrame.new(0,8,20, 0,0,0)
+
+-- PREVIEW MODEL
+local preview
+local renderConnection
+
+local function destroyPreview()
+	if preview then
+		preview:Destroy()
+		preview = nil
+	end
+end
+
+local function showPreview(name)
+	destroyPreview()
+
+	local model = Characters3D:FindFirstChild(name)
+	if not model then
+		warn("Modelo 3D não encontrado:", name)
+		return
+	end
+
+	preview = model:Clone()
+	preview.Name = name .. "Preview"
+	preview.Parent = workspace
+
+	local root = preview:FindFirstChild("HumanoidRootPart")
+	if root then
+		preview.PrimaryPart = root
+		preview:SetPrimaryPartCFrame(CFrame.new(0,0,0))
+	end
+
+	for _,p in ipairs(preview:GetDescendants()) do
+		if p:IsA("BasePart") then
+			p.CanCollide = false
+			p.Anchored = p.Name == "HumanoidRootPart"
+		end
+	end
+end
+
+-- GRID
 local grid = Instance.new("Frame")
-grid.Size = UDim2.fromScale(0.78, 0.5)
-grid.Position = UDim2.fromScale(0.11, 0.25)
+grid.Size = UDim2.fromScale(0.7,0.5)
+grid.Position = UDim2.fromScale(0.15,0.3)
 grid.BackgroundTransparency = 1
 grid.Parent = frame
 
 local layout = Instance.new("UIGridLayout")
-layout.CellSize = UDim2.fromScale(0.3, 0.42)
-layout.CellPadding = UDim2.fromScale(0.04, 0.08)
-layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+layout.CellSize = UDim2.fromScale(0.3,0.4)
+layout.CellPadding = UDim2.fromScale(0.05,0.08)
 layout.Parent = grid
 
-for _, characterName in ipairs(characters) do
-	local button = Instance.new("TextButton")
-	button.Name = characterName .. "Button"
-	button.Text = characterName
-	button.TextScaled = true
-	button.Font = Enum.Font.FredokaOne
-	button.TextColor3 = Color3.fromRGB(255, 255, 255)
-	button.BackgroundColor3 = characterName == "Porinha" and Color3.fromRGB(255, 120, 180) or Color3.fromRGB(38, 32, 58)
-	button.Parent = grid
+local selected
+
+for _,name in ipairs(characters) do
+	local b = Instance.new("TextButton")
+	b.Name = name .. "Button"
+	b.Text = name
+	b.TextScaled = true
+	b.Font = Enum.Font.FredokaOne
+	b.TextColor3 = Color3.fromRGB(255, 255, 255)
+	b.BackgroundColor3 = name == "Porinha" and Color3.fromRGB(255, 120, 180) or Color3.fromRGB(38, 32, 58)
+	b.Parent = grid
 
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 18)
-	corner.Parent = button
+	corner.Parent = b
 
-	button.MouseButton1Click:Connect(function()
-		print("Selecionando personagem:", characterName)
-		SelectCharacter:FireServer(characterName)
-		gui:Destroy()
+	b.MouseButton1Click:Connect(function()
+		selected = name
+		showPreview(name)
 	end)
 end
+
+-- PLAY BUTTON
+local play = Instance.new("TextButton")
+play.Name = "PlayButton"
+play.Text = "JOGAR"
+play.TextScaled = true
+play.Font = Enum.Font.FredokaOne
+play.TextColor3 = Color3.fromRGB(255, 255, 255)
+play.BackgroundColor3 = Color3.fromRGB(70, 130, 90)
+play.Size = UDim2.fromScale(0.2,0.08)
+play.Position = UDim2.fromScale(0.4,0.85)
+play.Parent = frame
+
+local playCorner = Instance.new("UICorner")
+playCorner.CornerRadius = UDim.new(0, 18)
+playCorner.Parent = play
+
+local function tween(obj,t,props)
+	local tw = TweenService:Create(obj,TweenInfo.new(t),props)
+	tw:Play()
+	return tw
+end
+
+play.MouseButton1Click:Connect(function()
+	if not selected then return end
+
+	play.Active = false
+	play.Text = "INICIANDO..."
+
+	-- ZOOM CAMERA
+	tween(camera,0.8,{CFrame = CFrame.new(0,3,8,0,0,0)})
+	task.wait(0.8)
+
+	-- FADE OUT
+	fade.BackgroundTransparency = 1
+	fade.Visible = true
+	tween(fade,0.5,{BackgroundTransparency = 0})
+	task.wait(0.5)
+
+	-- SPAWN
+	SelectCharacter:FireServer(selected)
+	destroyPreview()
+
+	-- RESTORE CAMERA
+	camera.CameraType = Enum.CameraType.Custom
+
+	-- FADE IN
+	tween(fade,0.8,{BackgroundTransparency = 1})
+	task.wait(0.8)
+
+	gui:Destroy()
+end)
+
+-- ROTATION
+renderConnection = RunService.RenderStepped:Connect(function(dt)
+	if preview and preview.PrimaryPart then
+		preview:SetPrimaryPartCFrame(preview.PrimaryPart.CFrame * CFrame.Angles(0,dt,0))
+	end
+end)
+
+gui.Destroying:Connect(function()
+	if renderConnection then
+		renderConnection:Disconnect()
+		renderConnection = nil
+	end
+
+	destroyPreview()
+end)
